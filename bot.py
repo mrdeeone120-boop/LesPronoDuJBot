@@ -1,45 +1,30 @@
-import asyncio
-import requests
-from telegram import Bot
-from bs4 import BeautifulSoup
-import random
+# bot.py - LesPronoDuJBot PRO
 
 import os
+import time
+import requests
+import random
+import pandas as pd
 
+# ✅ Token Telegram depuis variable d'environnement
 TOKEN = os.getenv("TOKEN")
-BOT_NAME = "LesPronoDuJBot"
-BANKROLL = 1000
+if not TOKEN:
+    raise Exception("⚠️ TOKEN non défini dans Environment Variables !")
 
-# ================= TELEGRAM =================
-async def send(chat_id, msg):
-    bot = Bot(token=TOKEN)
-    await bot.send_message(chat_id=chat_id, text=msg)
+# ✅ Chat ID fixe
+CHAT_ID = 2002767400  # remplace par ton chat_id
 
-def get_chat_id():
-    # Chat ID fixe
-    return 2002767400
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
-# ================= SCRAPING FLASHSCORE =================
-def get_matches():
-    url = "https://www.flashscore.com/football/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    soup = BeautifulSoup(requests.get(url, headers=headers).text, "html.parser")
+CSV_FILE = "valuebets.csv"
 
-    matches = []
-    for m in soup.select(".event__match")[:10]:
-        try:
-            home = m.select_one(".event__participant--home").text
-            away = m.select_one(".event__participant--away").text
-            matches.append((home, away))
-        except:
-            continue
-    return matches
+# Initialiser CSV si n'existe pas
+if not os.path.exists(CSV_FILE):
+    df = pd.DataFrame(columns=["match", "bet", "odds", "prob", "value", "stake"])
+    df.to_csv(CSV_FILE, index=False)
 
-# ================= LOGIQUE =================
+# Fonction pour générer un prono simulé
 def analyze_match(home, away):
-    import random
-
-    # Stats simulées mais cohérentes
     home_xg = random.uniform(1.0, 2.2)
     away_xg = random.uniform(0.8, 1.8)
 
@@ -48,7 +33,6 @@ def analyze_match(home, away):
     away_odds = random.uniform(2.0, 3.5)
 
     total = home_xg + away_xg
-
     probs = {
         "home": home_xg / total,
         "away": away_xg / total,
@@ -60,7 +44,6 @@ def analyze_match(home, away):
     for outcome in ["home", "draw", "away"]:
         odds = locals()[f"{outcome}_odds"]
         prob = probs[outcome]
-
         value = (odds * prob) - 1
 
         if value > 0.05:
@@ -75,60 +58,43 @@ def analyze_match(home, away):
                 "value": round(value, 2),
                 "stake": round(stake, 2)
             })
-
     return pronos
 
-# ================= MAIN LOOP =================
-async def main():
-    chat_id = get_chat_id()
-    matches = get_matches()
+# Envoyer message sur Telegram
+def send_message(message):
+    payload = {"chat_id": CHAT_ID, "text": message}
+    try:
+        requests.post(BASE_URL, data=payload)
+        print("✅ Message envoyé :", message)
+    except Exception as e:
+        print("❌ Erreur :", e)
 
-    found = 0
+# Liste de matchs simulés
+MATCHES = [
+    ("Team A", "Team B"),
+    ("Team C", "Team D"),
+    ("Team E", "Team F")
+]
 
-    for home, away in matches:
-        p = analyze_match(home, away)
-        if p:
-            msg = (
-                f"🔥 {BOT_NAME}\n"
-                f"{p['match']}\n"
-                f"🎯 Bet: {p['bet']}\n"
-                f"📊 Prob: {p['prob']}%\n"
-                f"💰 Odds: {p['odds']}\n"
-                f"💎 Value: {p['value']}\n"
-                f"💸 Stake: {p['stake']}€"
-            )
-            await send(chat_id, msg)
-            found += 1
+def main():
+    while True:
+        all_bets = []
+        for home, away in MATCHES:
+            bets = analyze_match(home, away)
+            for bet in bets:
+                msg = (f"🏟 {bet['match']}\n"
+                       f"💰 Bet: {bet['bet']} | Odds: {bet['odds']}\n"
+                       f"🎯 Prob: {bet['prob']}% | Value: {bet['value']}\n"
+                       f"💵 Stake: {bet['stake']:.2f}€")
+                send_message(msg)
+                all_bets.append(bet)
 
-    if found == 0:
-        await send(chat_id, "😴 Aucun value bet pour le moment")
+        # Ajouter les pronos au CSV
+        if all_bets:
+            df = pd.DataFrame(all_bets)
+            df.to_csv(CSV_FILE, mode="a", index=False, header=False)
 
-asyncio.run(main())
+        time.sleep(600)  # 10 minutes
 
-import pandas as pd
-
-# exemple après tes pronos
-df = pd.DataFrame(all_pronos)  # ou ta liste de bets
-df.to_csv("valuebets.csv", index=False)
-
-
-import pandas as pd
-
-# exemple liste de pronos
-all_pronos = []
-
-# quand tu crées un prono
-all_pronos.append({
-    "match": "PSG vs OM",
-    "bet": "home",
-    "odds": 1.8,
-    "prob": 60,
-    "value": 0.1,
-    "stake": 20
-})
-
-# SAUVEGARDE CSV
-df = pd.DataFrame(all_pronos)
-df.to_csv("valuebets.csv", index=False)
-
-print("CSV créé ✅")
+if __name__ == "__main__":
+    main()
