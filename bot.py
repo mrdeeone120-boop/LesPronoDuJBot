@@ -4,7 +4,9 @@ from telegram import Bot
 from bs4 import BeautifulSoup
 import random
 
-TOKEN = "TON_TOKEN"
+import os
+
+TOKEN = os.getenv("TOKEN")
 BOT_NAME = "LesPronoDuJBot"
 BANKROLL = 1000
 
@@ -14,8 +16,8 @@ async def send(chat_id, msg):
     await bot.send_message(chat_id=chat_id, text=msg)
 
 def get_chat_id():
-    url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
-    return requests.get(url).json()["result"][-1]["message"]["chat"]["id"]
+    # Chat ID fixe
+    return 2002767400
 
 # ================= SCRAPING FLASHSCORE =================
 def get_matches():
